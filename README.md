@@ -4,6 +4,8 @@
 
 # Arknights Client
 
+This personal fork supports a [source build in GitHub Actions](docs/development/personal-source-build.md). Its personal packages disable upstream launcher updates and project announcements.
+
 **Play Arknights PC on Apple Silicon Macs.** This free, unofficial launcher sets up the game. It runs the publisher's Windows game through bundled Wine and DXMT.
 
 [![Release](https://img.shields.io/github/v/release/LuMiSxh/Arknights-MacOS-Client?style=flat-square&labelColor=23252a&color=477acc)](https://github.com/LuMiSxh/Arknights-MacOS-Client/releases)

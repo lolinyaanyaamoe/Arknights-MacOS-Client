@@ -155,8 +155,9 @@ def test_sparkle_framework_copy_preserves_symlinks(tmp_path: Path) -> None:
 
 
 def test_sparkle_framework_version_comes_from_package_metadata(
-    tmp_path: Path, configuration: ProjectConfiguration
+    tmp_path: Path, configuration: ProjectConfiguration, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.delenv("ARKNIGHTS_SELF_BUILD_SPARKLE", raising=False)
     changed = replace(
         configuration,
         package=replace(

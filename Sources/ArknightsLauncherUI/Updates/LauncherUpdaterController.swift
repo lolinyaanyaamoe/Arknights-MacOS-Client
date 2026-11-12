@@ -12,6 +12,7 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 
 	private let lifecycle: LauncherLifecycleStore
 	private let log: LauncherLog
+	private let allowsUpdates: Bool
 	private lazy var updater = SPUUpdater(
 		hostBundle: .main,
 		applicationBundle: .main,
@@ -31,11 +32,14 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 	init(
 		lifecycle: LauncherLifecycleStore,
 		log: LauncherLog,
+		allowsUpdates: Bool = Bundle.main.object(
+			forInfoDictionaryKey: "SelfBuildDisablesLauncherUpdates") as? Bool != true,
 		activateApplication: @escaping () -> Void =
 			{ LauncherUpdateUserDriver.activateApplicationInFront() }
 	) {
 		self.lifecycle = lifecycle
 		self.log = log
+		self.allowsUpdates = allowsUpdates
 		let driver = LauncherUpdateUserDriver(
 			activateApplication: activateApplication,
 			canRetryTermination: { [weak lifecycle] in
@@ -60,7 +64,7 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 	}
 
 	var canOpenUpdate: Bool {
-		userDriver.phase != .hidden || lifecycle.canBeginExclusiveActivity
+		allowsUpdates && (userDriver.phase != .hidden || lifecycle.canBeginExclusiveActivity)
 	}
 
 	var hasActiveUpdate: Bool { userDriver.phase != .hidden }
@@ -71,6 +75,7 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 	}
 
 	func checkForUpdates() {
+		guard allowsUpdates else { return }
 		if userDriver.phase != .hidden && !userDriver.isPresented {
 			userDriver.showUpdateInFocus()
 			return
@@ -90,6 +95,10 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 	func checkForUpdateInformation(
 		completion: @escaping (LauncherUpdateCheckOutcome) -> Void
 	) {
+		guard allowsUpdates else {
+			completion(.current)
+			return
+		}
 		guard lifecycle.canBeginExclusiveActivity, check == nil else {
 			completion(.failed)
 			return
@@ -113,6 +122,7 @@ package final class LauncherUpdaterController: NSObject, SPUUpdaterDelegate {
 	#endif
 
 	private func startIfNeeded(showError: Bool) -> Bool {
+		guard allowsUpdates else { return false }
 		guard !hasStarted else { return true }
 		do {
 			try updater.start()

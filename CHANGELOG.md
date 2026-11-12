@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Add a personal Actions build that compiles the launcher, Wine, DXMT, and MoltenVK from pinned sources. Personal packages disable launcher updates and project announcements.
+
 ## [0.7.1] - 2026-10-19
 
 ### Changed

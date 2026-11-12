@@ -10,6 +10,19 @@ import Testing
 
 @MainActor
 struct LauncherUpdaterControllerTests {
+	@Test
+	func selfBuildNeverStartsAnUpstreamUpdateCheck() {
+		let lifecycle = makeLifecycleStore()
+		let subject = LauncherUpdaterController(
+			lifecycle: lifecycle, log: lifecycle.log, allowsUpdates: false)
+		var outcome: LauncherUpdateCheckOutcome?
+		subject.checkForUpdateInformation { outcome = $0 }
+		subject.checkForUpdates()
+		#expect(outcome == .current)
+		#expect(!subject.canOpenUpdate)
+		#expect(subject.userDriver.phase == .hidden)
+	}
+
 	@Test(arguments: UpdateLifecycleScenario.allCases)
 	func exactSparkleCheckDelegateAllowsOnlyAnIdleLifecycle(
 		scenario: UpdateLifecycleScenario

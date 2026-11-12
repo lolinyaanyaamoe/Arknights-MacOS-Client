@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import json
 import os
 import plistlib
 import shutil
@@ -63,10 +64,17 @@ def copy_resource(source: Path, destination: Path) -> None:
 def sparkle_framework(binary_dir: Path, configuration: ProjectConfiguration) -> Path:
     """Find the validated Sparkle artifact emitted by SwiftPM."""
     project = configuration.project_directory
-    expected_version = configuration.package.exact_dependency_version("sparkle")
+    if os.environ.get("ARKNIGHTS_SELF_BUILD_SPARKLE") == "1":
+        pin = json.loads(
+            (project / ".build/self-build/Sparkle/source-pin.json").read_text()
+        )
+        expected_version = pin["version"]
+    else:
+        expected_version = configuration.package.exact_dependency_version("sparkle")
     roots = (
         binary_dir,
         project / BUILD_DIR.relative_to(PROJECT_DIR) / "artifacts/sparkle",
+        project / BUILD_DIR.relative_to(PROJECT_DIR) / "self-build/Sparkle",
     )
     for root in roots:
         for candidate in sorted(root.rglob(SPARKLE_FRAMEWORK_NAME)):

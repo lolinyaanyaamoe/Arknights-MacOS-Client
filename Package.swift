@@ -1,6 +1,7 @@
 // swift-tools-version: 6.4
 // SPDX-License-Identifier: MPL-2.0
 
+import Foundation
 import PackageDescription
 
 let appResources: [Resource] = [
@@ -25,8 +26,10 @@ let package = Package(
 		.executable(name: "ArknightsClient", targets: ["ArknightsClient"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.9.6"),
-		.package(url: "https://github.com/SvenTiigi/YouTubePlayerKit.git", from: "2.0.0"),
+		ProcessInfo.processInfo.environment["ARKNIGHTS_SELF_BUILD_SPARKLE"] == "1"
+			? .package(path: ".build/self-build/Sparkle")
+			: .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.9.6"),
+		.package(url: "https://github.com/SvenTiigi/YouTubePlayerKit.git", exact: "2.0.5"),
 	],
 	targets: [
 		.systemLibrary(

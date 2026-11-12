@@ -1,0 +1,225 @@
+name: Personal source build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-source-build
+  cancel-in-progress: false
+
+jobs:
+  moltenvk:
+    name: Compile MoltenVK and its shader dependencies
+    runs-on: xcode-27
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: KhronosGroup/MoltenVK
+          ref: db66022459ffb663aa2b50f6b018bc2e124f5edf
+          persist-credentials: false
+      - name: Build pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install cmake ninja
+          ./fetchDependencies --macos
+          xcodebuild build -quiet -project MoltenVKPackaging.xcodeproj \
+            -scheme 'MoltenVK Package (macOS only)' -configuration Release \
+            -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO \
+            MACOSX_DEPLOYMENT_TARGET=15.0
+          mkdir -p output
+          lipo Package/Release/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib \
+            -thin x86_64 -output output/libMoltenVK.dylib
+          git rev-parse HEAD > output/source-commit.txt
+          cp -R LICENSE* ExternalRevisions output/
+          tar -czf moltenvk-source-build.tar.gz -C output .
+          shasum -a 256 moltenvk-source-build.tar.gz > moltenvk-source-build.tar.gz.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: moltenvk-source-build
+          path: moltenvk-source-build.tar.gz*
+          if-no-files-found: error
+          retention-days: 3
+
+  sparkle:
+    name: Compile Sparkle from the locked source revision
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: sparkle-project/Sparkle
+          ref: ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a
+          path: .build/self-build/sparkle-source
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Build framework and local Swift package
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild archive -quiet \
+            -project .build/self-build/sparkle-source/Sparkle.xcodeproj \
+            -scheme Sparkle -configuration Release \
+            -archivePath "$RUNNER_TEMP/Sparkle.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/sparkle-derived" \
+            SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES CODE_SIGN_IDENTITY=-
+          uv run --locked --no-dev scripts/self_build.py configure-sparkle \
+            .build/self-build/sparkle-source \
+            "$RUNNER_TEMP/Sparkle.xcarchive/Products/Library/Frameworks/Sparkle.framework"
+          tar -czf sparkle-source-build.tar.gz -C .build/self-build Sparkle
+          shasum -a 256 sparkle-source-build.tar.gz > sparkle-source-build.tar.gz.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sparkle-source-build
+          path: sparkle-source-build.tar.gz*
+          if-no-files-found: error
+          retention-days: 3
+
+  runtime:
+    name: Compile Wine and DXMT without the upstream binary base
+    needs: moltenvk
+    runs-on: macos-15
+    timeout-minutes: 360
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      SELF_BUILD_MOLTENVK_LIBRARY: ${{ github.workspace }}/.build/self-build/moltenvk/libMoltenVK.dylib
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: LuMiSxh/Arknights-MacOS-Runtime
+          ref: d9f41d20117cf53c97c7097ce33e0db156174d67
+          path: .build/self-build/runtime-source
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: moltenvk-source-build
+          path: .build/self-build/moltenvk
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: cachix/install-nix-action@d698718aa798980d17dd749f03beae0b51183399 # v31
+        with:
+          extra_nix_config: |
+            extra-platforms = x86_64-darwin
+      - name: Install build tools
+        run: |
+          softwareupdate --install-rosetta --agree-to-license
+          brew install ccache just mingw-w64 meson ninja
+      - name: Validate and use the source-built MoltenVK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .build/self-build/moltenvk
+          shasum -a 256 -c moltenvk-source-build.tar.gz.sha256
+          tar -xzf moltenvk-source-build.tar.gz
+          test "$(cat source-commit.txt)" = db66022459ffb663aa2b50f6b018bc2e124f5edf
+          cd "$GITHUB_WORKSPACE"
+          uv run --locked --no-dev scripts/self_build.py patch-runtime \
+            .build/self-build/runtime-source "$SELF_BUILD_MOLTENVK_LIBRARY"
+      - name: Check and compile the pinned runtime
+        working-directory: .build/self-build/runtime-source
+        run: |
+          just check
+          just build-release
+      - name: Collect runtime and source evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=.build/self-build/runtime-source
+          stage="$source/.build/stages/combined"
+          mkdir -p output
+          cp "$stage/Arknights-MacOS-Runtime-combined.tar.gz" output/runtime.tar.gz
+          cp "$stage/runtime-component-inventory.tsv" "$stage/build-toolchain.json" \
+            "$source/runtime.lock.json" "$source/personal-source-build.patch" output/
+          tar -czf output/runtime-sources.tar.gz --exclude=.git --exclude=__pycache__ \
+            -C "$stage/sources" wine-combined dxmt-combined \
+            -C "$GITHUB_WORKSPACE/$source" patches scripts LICENSE LICENSES
+          cd output
+          shasum -a 256 runtime.tar.gz runtime-sources.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: personal-runtime
+          path: output/*
+          if-no-files-found: error
+          retention-days: 3
+
+  launcher:
+    name: Test and package the personal launcher
+    needs: [runtime, sparkle]
+    runs-on: xcode-27
+    timeout-minutes: 90
+    env:
+      ARKNIGHTS_SELF_BUILD_SPARKLE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: personal-runtime
+          path: .build/self-build/runtime-artifact
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sparkle-source-build
+          path: .build/self-build
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - name: Prepare locally compiled dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .build/self-build
+          shasum -a 256 -c sparkle-source-build.tar.gz.sha256
+          tar -xzf sparkle-source-build.tar.gz
+          cd runtime-artifact
+          shasum -a 256 -c SHA256SUMS
+          cd "$GITHUB_WORKSPACE"
+          uv run --locked --no-dev scripts/self_build.py stage-runtime \
+            .build/self-build/runtime-artifact/runtime.tar.gz
+      - name: Run offline tests and release compilation
+        run: just ci
+      - name: Verify the remaining Swift source dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .build/checkouts/YouTubePlayerKit rev-parse HEAD)" = 1ae827573024ab13dd6adea33b25d3eef6ff667c
+      - name: Disable upstream launcher updates and announcements
+        run: uv run --locked --no-dev scripts/self_build.py configure-app
+      - name: Build and verify DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --locked --no-dev --group packaging scripts/build_dmg.py \
+            --runtime .build/runtime --strict-licenses
+          app="$(uv run --locked --no-dev scripts/project_config.py app-bundle-name)"
+          test "$(plutil -extract SelfBuildDisablesLauncherUpdates raw "dist/$app/Contents/Info.plist")" = true
+          if plutil -extract SUFeedURL raw "dist/$app/Contents/Info.plist"; then exit 1; fi
+          if plutil -extract LauncherAnnouncementsURL raw "dist/$app/Contents/Info.plist"; then exit 1; fi
+          cp runtime.json dist/SELF-BUILD-RUNTIME.json
+          cp .build/self-build/Sparkle/source-pin.json dist/SPARKLE-SOURCE.json
+          cp .build/self-build/runtime-artifact/runtime-component-inventory.tsv dist/
+          git rev-parse HEAD > dist/SOURCE-COMMIT.txt
+          git diff --binary > dist/BUILD-TIME-CHANGES.patch
+          cd dist
+          shasum -a 256 ./*.dmg SELF-BUILD-RUNTIME.json SPARKLE-SOURCE.json \
+            SOURCE-COMMIT.txt BUILD-TIME-CHANGES.patch runtime-component-inventory.tsv > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Arknights-Client-personal-source-build
+          path: |
+            dist/*.dmg
+            dist/*.json
+            dist/*.txt
+            dist/*.tsv
+            dist/*.patch
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 3
