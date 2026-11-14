@@ -15,6 +15,7 @@ repository does not commit it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import zlib
@@ -333,7 +334,12 @@ def load_runtime_legal(
 
 def swiftpm_pins(root: Path) -> dict[str, str]:
     document = read_json(root / "Package.resolved")
-    return {pin["identity"]: pin["state"]["version"] for pin in document["pins"]}
+    pins = {pin["identity"]: pin["state"]["version"] for pin in document["pins"]}
+    source_pin = root / ".build/self-build/Sparkle/source-pin.json"
+    # SwiftPM omits local packages from Package.resolved after resolution.
+    if os.environ.get("ARKNIGHTS_SELF_BUILD_SPARKLE") == "1" and source_pin.is_file():
+        pins["sparkle"] = read_json(source_pin)["version"]
+    return pins
 
 
 def website_dependencies(root: Path) -> dict[str, str]:

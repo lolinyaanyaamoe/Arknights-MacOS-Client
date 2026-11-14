@@ -13,6 +13,7 @@ The app disables launcher updates before Sparkle starts. It removes the upstream
 - WineCX and DXMT: the commits and patches in that recipe's `runtime.lock.json`.
 - MoltenVK: `KhronosGroup/MoltenVK@db66022459ffb663aa2b50f6b018bc2e124f5edf`. Its own revision files select its shader dependencies. The runtime's precompiled base-archive download is removed.
 - Sparkle: `sparkle-project/Sparkle@ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a`. A local Swift package links the framework compiled in this workflow.
+  SwiftPM removes the remote Sparkle entry from `Package.resolved`. Personal builds read its version from the generated `source-pin.json` for license checks.
 - YouTubePlayerKit: compiled by SwiftPM from `Package.resolved`.
 
 GitHub runners, Apple SDKs, compilers, Python packages, Homebrew tools, and Nix library caches remain external binary inputs. The runtime component inventory records Nix libraries. This workflow does not claim a bootstrap from source for every transitive dependency. Building reviewed source also does not prove that the source is safe.

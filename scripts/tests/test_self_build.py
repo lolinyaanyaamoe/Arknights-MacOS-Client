@@ -9,8 +9,27 @@ from pathlib import Path
 
 import pytest
 import self_build
+from lib.licenses import swiftpm_pins
 from runtime_config import load_runtime_config
 from test_download_runtime import write_runtime_archive
+
+
+@pytest.mark.parametrize("personal_build", ["0", "1"])
+def test_source_built_framework_keeps_its_license_version_after_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, personal_build: str
+) -> None:
+    monkeypatch.setenv("ARKNIGHTS_SELF_BUILD_SPARKLE", personal_build)
+    (tmp_path / "Package.resolved").write_text(
+        json.dumps({"pins": [{"identity": "other", "state": {"version": "1.2.3"}}]})
+    )
+    source_pin = tmp_path / ".build/self-build/Sparkle/source-pin.json"
+    source_pin.parent.mkdir(parents=True)
+    source_pin.write_text(json.dumps({"revision": "reviewed", "version": "2.9.6"}))
+
+    expected = {"other": "1.2.3"}
+    if personal_build == "1":
+        expected["sparkle"] = "2.9.6"
+    assert swiftpm_pins(tmp_path) == expected
 
 
 def test_personal_package_has_no_upstream_update_or_announcement_feed(

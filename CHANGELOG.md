@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Personal builds use the launcher's minimum macOS version for Sparkle and its helper targets. This fixes Sparkle compilation with Xcode 27.
+- Personal builds keep Sparkle in the license inventory after SwiftPM removes its remote package pin.
 
 ## [0.7.1] - 2026-10-19
 
