@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Add a personal Actions build that compiles the launcher, Wine, DXMT, and MoltenVK from pinned sources. Personal packages disable launcher updates and project announcements.
 
+### Fixed
+
+- Personal builds use the launcher's minimum macOS version for Sparkle and its helper targets. This fixes Sparkle compilation with Xcode 27.
+
 ## [0.7.1] - 2026-10-19
 
 ### Changed

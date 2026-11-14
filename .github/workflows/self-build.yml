@@ -64,12 +64,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          minimum_macos="$(uv run --locked --no-dev scripts/project_config.py minimum-macos-version)"
           xcodebuild archive -quiet \
             -project .build/self-build/sparkle-source/Sparkle.xcodeproj \
             -scheme Sparkle -configuration Release \
+            -destination 'generic/platform=macOS' \
             -archivePath "$RUNNER_TEMP/Sparkle.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/sparkle-derived" \
-            SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES CODE_SIGN_IDENTITY=-
+            SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES CODE_SIGN_IDENTITY=- \
+            MACOSX_DEPLOYMENT_TARGET="$minimum_macos"
           uv run --locked --no-dev scripts/self_build.py configure-sparkle \
             .build/self-build/sparkle-source \
             "$RUNNER_TEMP/Sparkle.xcarchive/Products/Library/Frameworks/Sparkle.framework"

@@ -24,6 +24,9 @@ FIELDS: dict[str, Callable[[ProjectConfiguration], str]] = {
     "sparkle-update-name": lambda configuration: configuration.sparkle_update_name,
     "sparkle-delta-sources": lambda configuration: str(SPARKLE_DELTA_SOURCE_COUNT),
     "marketing-version": lambda configuration: configuration.product.marketing_version,
+    "minimum-macos-version": lambda configuration: (
+        configuration.product.minimum_macos_version
+    ),
     "swift-architecture-arguments": lambda configuration: " ".join(
         f"--arch {architecture}"
         for architecture in configuration.product.architecture_priority
